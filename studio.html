@@ -39,6 +39,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .etat{margin-top:12px;padding:12px;border-radius:12px;display:none}.etat.ok{display:block;background:rgba(92,199,154,.12);border:1px solid var(--vert)}
 .etat.ko{display:block;background:rgba(229,101,91,.12);border:1px solid var(--rouge)}.etat.cours{display:block;background:rgba(212,166,74,.1);border:1px solid var(--ligne)}
 .cache{display:none}
+#seConnecter{background:#fff;color:#000}
 </style>
 </head>
 <body><main>
@@ -46,9 +47,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <h1>Post to TikTok</h1>
 <p class="sous">Review your video, choose your settings, then post. <span class="fr">Vérifie, choisis, publie.</span></p>
 
-<div id="erreur" class="etat ko"></div>
+<div id="erreur" class="etat"></div>
+<div id="connexion" class="carte cache"><p style="margin:0 0 10px">Connect your TikTok account to post. <span class="fr">Connecte ton compte TikTok pour publier.</span></p><button id="seConnecter">Continue with TikTok · Se connecter</button></div>
 <div id="studio" class="cache">
-  <div class="carte compte"><img id="avatar" alt=""><div><b id="pseudo"></b><span>Posting to this TikTok account · <span class="fr">publication sur ce compte</span></span></div></div>
+  <div class="carte compte"><img id="avatar" alt=""><div><b id="pseudo"></b><span>Posting to this TikTok account · <span class="fr">publication sur ce compte</span></span><br><a href="#" id="changer" style="color:var(--or2);font-size:13px">Switch account · changer de compte</a></div></div>
 
   <div class="carte"><video id="apercu" controls playsinline preload="metadata"></video>
     <div id="dureeKo" class="info cache"></div></div>
@@ -89,7 +91,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </main>
 <script>
 (function(){
-var p=new URLSearchParams(location.hash.slice(1)),ID=p.get("id")||"",K=p.get("k")||"",API=(p.get("api")||"").replace(/\/$/,"");
+// Retour de la connexion TikTok (?code=…&state=…) : les paramètres du lien sont repris de la session
+var q=new URLSearchParams(location.search),h=location.hash.slice(1);
+try{if(h)sessionStorage.setItem("studio",h);else h=sessionStorage.getItem("studio")||""}catch(e){}
+var p=new URLSearchParams(h),ID=p.get("id")||"",K=p.get("k")||"",API=(p.get("api")||"").replace(/\/$/,"");
 var $=function(i){return document.getElementById(i)},creator=null,duree=null;
 var LIBELLES={PUBLIC_TO_EVERYONE:"Everyone · Tout le monde",MUTUAL_FOLLOW_FRIENDS:"Friends · Amis",FOLLOWER_OF_CREATOR:"Followers · Abonnés",SELF_ONLY:"Only me · Moi uniquement"};
 var MUC='<a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a>';
@@ -130,6 +135,9 @@ $("publier").onclick=function(){
 };
 ["visibilite","commercial","maMarque","tiers","legende"].forEach(function(i){$(i).addEventListener(i==="legende"?"input":"change",maj)});
 if(!ID||!K||!API){erreur("Lien incomplet : ouvre le lien depuis le message Telegram.");return}
+function connecter(){api("/api/connexion").then(function(r){location.href=r.url}).catch(function(x){erreur(x.message)})}
+$("seConnecter").onclick=connecter;$("changer").onclick=function(ev){ev.preventDefault();connecter()};
+function charger(){
 Promise.all([api("/api/creator"),api("/api/short?id="+encodeURIComponent(ID))]).then(function(r){
   creator=r[0];var s=r[1];
   $("pseudo").textContent=(creator.creator_nickname||"")+" (@"+(creator.creator_username||"")+")";
@@ -141,7 +149,13 @@ Promise.all([api("/api/creator"),api("/api/short?id="+encodeURIComponent(ID))]).
   $("apercu").src=API+"/video/"+ID+"?k="+encodeURIComponent(K);
   if(s.publie){var e=$("etat");e.className="etat ok";e.textContent="This Short is already on TikTok. / Ce Short est déjà publié."}
   $("studio").className="";maj();
-}).catch(function(x){erreur("Impossible de joindre le studio : "+x.message+". Vérifie que Tailscale est activé sur le téléphone.")});
+}).catch(function(x){if(/connecte/.test(x.message)){$("connexion").className="carte";return}
+  erreur("Impossible de joindre le studio : "+x.message+". Vérifie que Tailscale est activé sur le téléphone.")});
+}
+if(q.get("code")){
+  api("/api/code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:q.get("code"),etat:q.get("state")})})
+  .then(function(){history.replaceState(null,"",location.pathname+"#"+h);charger()}).catch(function(x){erreur("Connexion TikTok refusée : "+x.message)});
+}else{charger()}
 })();
 </script>
 </body></html>
